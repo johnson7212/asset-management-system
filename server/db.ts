@@ -209,6 +209,12 @@ export async function updateFundNav(id: number, nav: string) {
   await db.update(funds).set({ nav }).where(eq(funds.id, id));
 }
 
+export async function deleteFund(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(funds).where(eq(funds.id, id));
+}
+
 // Fund Holding Management
 export async function getFundHoldingsByUserId(userId: number) {
   const db = await getDb();

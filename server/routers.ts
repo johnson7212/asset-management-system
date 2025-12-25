@@ -148,7 +148,7 @@ export const appRouter = router({
       return await db.getAllFunds();
     }),
     
-    create: adminProcedure
+    create: protectedProcedure
       .input(z.object({
         name: z.string(),
         code: z.string().optional(),
@@ -157,6 +157,13 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         await db.createFund(input);
+        return { success: true };
+      }),
+    
+    delete: adminProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await db.deleteFund(input.id);
         return { success: true };
       }),
     

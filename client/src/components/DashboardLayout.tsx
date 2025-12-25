@@ -32,6 +32,7 @@ const getMenuItems = (userRole?: string) => {
     { icon: LayoutDashboard, label: "總覽", path: "/" },
     { icon: Wallet, label: "銀行帳戶", path: "/banks" },
     { icon: TrendingUp, label: "基金持倉", path: "/funds" },
+    { icon: TrendingUp, label: "基金清單", path: "/funds-list" },
     { icon: PieChart, label: "股票持倉", path: "/stocks" },
     { icon: Bitcoin, label: "虛擬資產", path: "/crypto" },
     { icon: DollarSign, label: "損益分析", path: "/analysis" },

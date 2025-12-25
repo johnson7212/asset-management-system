@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { Plus, TrendingUp, Trash2 } from "lucide-react";
 import { useState } from "react";
@@ -26,6 +27,11 @@ export default function Funds() {
   const [open, setOpen] = useState(false);
   const [bankId, setBankId] = useState("");
   const [fundId, setFundId] = useState("");
+  const [newFundName, setNewFundName] = useState("");
+  const [newFundCode, setNewFundCode] = useState("");
+  const [newFundNav, setNewFundNav] = useState("");
+  const [newFundCurrency, setNewFundCurrency] = useState("");
+  const [useNewFund, setUseNewFund] = useState(false);
   const [units, setUnits] = useState("");
   const [avgCost, setAvgCost] = useState("");
 
@@ -35,9 +41,12 @@ export default function Funds() {
   const { data: funds } = trpc.funds.list.useQuery();
   const { data: currencies } = trpc.currencies.list.useQuery();
 
+  const createFundMutation = trpc.funds.create.useMutation();
+  
   const createMutation = trpc.fundHoldings.create.useMutation({
     onSuccess: () => {
       utils.fundHoldings.list.invalidate();
+      utils.funds.list.invalidate();
       toast.success("基金持倉已新增");
       setOpen(false);
       resetForm();
@@ -60,18 +69,61 @@ export default function Funds() {
   const resetForm = () => {
     setBankId("");
     setFundId("");
+    setNewFundName("");
+    setNewFundCode("");
+    setNewFundNav("");
+    setNewFundCurrency("");
+    setUseNewFund(false);
     setUnits("");
     setAvgCost("");
   };
 
-  const handleCreate = () => {
-    if (!bankId || !fundId || !units || !avgCost) {
-      toast.error("請填寫所有必填欄位");
+  const handleCreate = async () => {
+    if (!bankId || !units || !avgCost) {
+      toast.error("請填寫銀行、單位數與平均成本");
       return;
     }
+
+    let finalFundId: number | null = null;
+
+    if (useNewFund) {
+      if (!newFundName.trim() || !newFundCurrency) {
+        toast.error("請填寫基金名稱與幣別");
+        return;
+      }
+      try {
+        await createFundMutation.mutateAsync({
+          name: newFundName,
+          code: newFundCode || undefined,
+          currencyId: parseInt(newFundCurrency),
+          nav: newFundNav || undefined,
+        });
+        // Refresh funds list and get the newly created fund
+        const updatedFunds = await utils.funds.list.fetch();
+        const newFund = updatedFunds.find((f) => f.name === newFundName);
+        if (newFund) {
+          finalFundId = newFund.id;
+        }
+      } catch (error) {
+        toast.error("建立基金失敗");
+        return;
+      }
+    } else {
+      if (!fundId) {
+        toast.error("請選擇基金");
+        return;
+      }
+      finalFundId = parseInt(fundId);
+    }
+
+    if (!finalFundId) {
+      toast.error("無法確定基金 ID");
+      return;
+    }
+
     createMutation.mutate({
       bankId: parseInt(bankId),
-      fundId: parseInt(fundId),
+      fundId: finalFundId,
       units,
       avgCost,
     });
@@ -118,7 +170,7 @@ export default function Funds() {
                 新增持倉
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>新增基金持倉</DialogTitle>
               </DialogHeader>
@@ -138,21 +190,78 @@ export default function Funds() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="fund">基金 *</Label>
-                  <Select value={fundId} onValueChange={setFundId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="選擇基金" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {funds?.map((fund) => (
-                        <SelectItem key={fund.id} value={fund.id.toString()}>
-                          {fund.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+
+                {/* Tabs for Fund Selection */}
+                <Tabs value={useNewFund ? "new" : "existing"} onValueChange={(v) => setUseNewFund(v === "new")}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="existing">選擇基金</TabsTrigger>
+                    <TabsTrigger value="new">新建基金</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="existing" className="space-y-2">
+                    <Label htmlFor="fund">基金 *</Label>
+                    <Select value={fundId} onValueChange={setFundId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="選擇基金" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {funds?.map((fund) => (
+                          <SelectItem key={fund.id} value={fund.id.toString()}>
+                            {fund.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TabsContent>
+
+                  <TabsContent value="new" className="space-y-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="newFundName">基金名稱 *</Label>
+                      <Input
+                        id="newFundName"
+                        placeholder="例如: 元大台灣50"
+                        value={newFundName}
+                        onChange={(e) => setNewFundName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="newFundCode">基金代碼 (選填)</Label>
+                      <Input
+                        id="newFundCode"
+                        placeholder="例如: 0050"
+                        value={newFundCode}
+                        onChange={(e) => setNewFundCode(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="newFundCurrency">幣別 *</Label>
+                      <Select value={newFundCurrency} onValueChange={setNewFundCurrency}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="選擇幣別" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {currencies?.map((currency) => (
+                            <SelectItem key={currency.id} value={currency.id.toString()}>
+                              {currency.symbol} {currency.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="newFundNav">淨值 (選填)</Label>
+                      <Input
+                        id="newFundNav"
+                        type="number"
+                        step="0.000001"
+                        placeholder="例如: 15.25"
+                        value={newFundNav}
+                        onChange={(e) => setNewFundNav(e.target.value)}
+                      />
+                    </div>
+                  </TabsContent>
+                </Tabs>
+
                 <div className="space-y-2">
                   <Label htmlFor="units">單位數 *</Label>
                   <Input
@@ -178,9 +287,9 @@ export default function Funds() {
                 <Button
                   className="w-full"
                   onClick={handleCreate}
-                  disabled={createMutation.isPending}
+                  disabled={createMutation.isPending || createFundMutation.isPending}
                 >
-                  {createMutation.isPending ? "新增中..." : "確認新增"}
+                  {createMutation.isPending || createFundMutation.isPending ? "新增中..." : "確認新增"}
                 </Button>
               </div>
             </DialogContent>

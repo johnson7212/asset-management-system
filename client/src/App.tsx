@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Home from "./pages/Home";
 import Banks from "./pages/Banks";
 import Funds from "./pages/Funds";
+import FundsList from "./pages/FundsList";
 import Stocks from "./pages/Stocks";
 import Crypto from "./pages/Crypto";
 import Analysis from "./pages/Analysis";
@@ -18,6 +19,7 @@ function Router() {
       <Route path={"/"} component={Home} />
       <Route path={"/banks"} component={Banks} />
       <Route path={"/funds"} component={Funds} />
+      <Route path={"/funds-list"} component={FundsList} />
       <Route path={"/stocks"} component={Stocks} />
       <Route path={"/crypto"} component={Crypto} />
       <Route path={"/analysis"} component={Analysis} />
