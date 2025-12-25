@@ -15,6 +15,13 @@
       "when": 1766627258172,
       "tag": "0001_hard_dazzler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1766629997256,
+      "tag": "0002_melodic_tomas",
+      "breakpoints": true
     }
   ]
 }

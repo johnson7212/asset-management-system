@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, inArray, and } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { 
   InsertUser, 
@@ -213,6 +213,20 @@ export async function deleteFund(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(funds).where(eq(funds.id, id));
+}
+
+export async function getFundById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(funds).where(eq(funds.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getFundsByIds(ids: number[]) {
+  const db = await getDb();
+  if (!db) return [];
+  if (ids.length === 0) return [];
+  return await db.select().from(funds).where(inArray(funds.id, ids));
 }
 
 // Fund Holding Management

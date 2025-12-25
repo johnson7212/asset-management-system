@@ -80,11 +80,14 @@ export const funds = mysqlTable("funds", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(), // 基金名稱
   code: varchar("code", { length: 50 }), // 基金代碼
+  fundrichCode: varchar("fundrichCode", { length: 50 }), // 基富通基金代碼 (用於網頁擷取)
   nav: decimal("nav", { precision: 20, scale: 6 }), // 淨值 (Net Asset Value)
   currencyId: int("currencyId").notNull(),
+  lastNavUpdateTime: timestamp("lastNavUpdateTime"), // 上次淨值更新時間
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   codeIdx: index("code_idx").on(table.code),
+  fundrichCodeIdx: index("fundrichCode_idx").on(table.fundrichCode),
 }));
 
 export type Fund = typeof funds.$inferSelect;

@@ -5,6 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import * as db from "./db";
+import * as fundApi from "./services/fundApi";
 
 // Admin-only procedure
 const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
@@ -175,6 +176,31 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         await db.updateFundNav(input.id, input.nav);
         return { success: true };
+      }),
+    
+    fetchNav: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        fundCode: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const fund = await db.getFundById(input.id);
+        if (!fund) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: '基金不存在' });
+        }
+        
+        const fundCode = input.fundCode || fund.code;
+        if (!fundCode) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: '基金代碼不存在' });
+        }
+        
+        const navData = await fundApi.fetchFundNav(fundCode, fund.name);
+        if (!navData) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '無法獲取基金淨值' });
+        }
+        
+        await db.updateFundNav(input.id, navData.nav);
+        return { success: true, nav: navData.nav, timestamp: navData.timestamp };
       }),
   }),
 

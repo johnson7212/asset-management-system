@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users, Wallet, TrendingUp, PieChart, Bitcoin, DollarSign } from "lucide-react";
+import { LayoutDashboard, LogOut, PanelLeft, Users, Wallet, TrendingUp, PieChart, Bitcoin, DollarSign, RefreshCw } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
@@ -33,6 +33,7 @@ const getMenuItems = (userRole?: string) => {
     { icon: Wallet, label: "銀行帳戶", path: "/banks" },
     { icon: TrendingUp, label: "基金持倉", path: "/funds" },
     { icon: TrendingUp, label: "基金清單", path: "/funds-list" },
+    { icon: RefreshCw, label: "更新淨值", path: "/funds-update" },
     { icon: PieChart, label: "股票持倉", path: "/stocks" },
     { icon: Bitcoin, label: "虛擬資產", path: "/crypto" },
     { icon: DollarSign, label: "損益分析", path: "/analysis" },
