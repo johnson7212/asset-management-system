@@ -1,4 +1,3 @@
-import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,9 +18,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Plus, TrendingUp, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { Plus, TrendingUp, Trash2, Loader2, AlertCircle } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
+import DashboardLayout from "@/components/DashboardLayout";
 
 export default function Funds() {
   const [open, setOpen] = useState(false);
@@ -34,6 +34,9 @@ export default function Funds() {
   const [useNewFund, setUseNewFund] = useState(false);
   const [units, setUnits] = useState("");
   const [avgCost, setAvgCost] = useState("");
+  const [isFetchingFundInfo, setIsFetchingFundInfo] = useState(false);
+  const [fundFetchError, setFundFetchError] = useState("");
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const utils = trpc.useUtils();
   const { data: fundHoldings, isLoading } = trpc.fundHoldings.list.useQuery();
@@ -42,6 +45,10 @@ export default function Funds() {
   const { data: currencies } = trpc.currencies.list.useQuery();
 
   const createFundMutation = trpc.funds.create.useMutation();
+  const fetchFundInfoMutation = trpc.funds.fetchFundInfo.useQuery(
+    { fundCode: newFundCode },
+    { enabled: false }
+  );
   
   const createMutation = trpc.fundHoldings.create.useMutation({
     onSuccess: () => {
@@ -76,7 +83,56 @@ export default function Funds() {
     setUseNewFund(false);
     setUnits("");
     setAvgCost("");
+    setFundFetchError("");
   };
+
+  // 自動抓取基金資訊
+  const handleFundCodeChange = useCallback(
+    (code: string) => {
+      setNewFundCode(code);
+      setFundFetchError("");
+
+      // 清除之前的防抖計時器
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+
+      if (!code.trim()) {
+        return;
+      }
+
+      // 設置新的防抖計時器
+      debounceTimerRef.current = setTimeout(async () => {
+        setIsFetchingFundInfo(true);
+        try {
+          const result = await fetchFundInfoMutation.refetch();
+          
+          if (result.data) {
+            const fundInfo = result.data;
+            setNewFundName(fundInfo.fundName);
+            setNewFundNav(fundInfo.nav);
+            
+            // 自動選擇對應的幣別
+            const matchingCurrency = currencies?.find(
+              (c) => c.code === fundInfo.currency
+            );
+            if (matchingCurrency) {
+              setNewFundCurrency(matchingCurrency.id.toString());
+            }
+            
+            toast.success(`已自動填入基金資訊: ${fundInfo.fundName}`);
+          }
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "無法獲取基金資訊";
+          setFundFetchError(errorMessage);
+          toast.error(`抓取失敗: ${errorMessage}`);
+        } finally {
+          setIsFetchingFundInfo(false);
+        }
+      }, 800); // 800ms 防抖延遲
+    },
+    [currencies, fetchFundInfoMutation]
+  );
 
   const handleCreate = async () => {
     if (!bankId || !units || !avgCost) {
@@ -191,76 +247,103 @@ export default function Funds() {
                   </Select>
                 </div>
 
-                {/* Tabs for Fund Selection */}
-                <Tabs value={useNewFund ? "new" : "existing"} onValueChange={(v) => setUseNewFund(v === "new")}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="existing">選擇基金</TabsTrigger>
-                    <TabsTrigger value="new">新建基金</TabsTrigger>
-                  </TabsList>
+                <div className="space-y-2">
+                  <Label>基金選擇 *</Label>
+                  <Tabs
+                    value={useNewFund ? "new" : "existing"}
+                    onValueChange={(value) => setUseNewFund(value === "new")}
+                  >
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="existing">現有基金</TabsTrigger>
+                      <TabsTrigger value="new">新增基金</TabsTrigger>
+                    </TabsList>
 
-                  <TabsContent value="existing" className="space-y-2">
-                    <Label htmlFor="fund">基金 *</Label>
-                    <Select value={fundId} onValueChange={setFundId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="選擇基金" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {funds?.map((fund) => (
-                          <SelectItem key={fund.id} value={fund.id.toString()}>
-                            {fund.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TabsContent>
-
-                  <TabsContent value="new" className="space-y-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="newFundName">基金名稱 *</Label>
-                      <Input
-                        id="newFundName"
-                        placeholder="例如: 元大台灣50"
-                        value={newFundName}
-                        onChange={(e) => setNewFundName(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newFundCode">基金代碼 (選填)</Label>
-                      <Input
-                        id="newFundCode"
-                        placeholder="例如: 0050"
-                        value={newFundCode}
-                        onChange={(e) => setNewFundCode(e.target.value)}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newFundCurrency">幣別 *</Label>
-                      <Select value={newFundCurrency} onValueChange={setNewFundCurrency}>
+                    <TabsContent value="existing" className="space-y-2">
+                      <Label htmlFor="fund">基金 *</Label>
+                      <Select value={fundId} onValueChange={setFundId}>
                         <SelectTrigger>
-                          <SelectValue placeholder="選擇幣別" />
+                          <SelectValue placeholder="選擇基金" />
                         </SelectTrigger>
                         <SelectContent>
-                          {currencies?.map((currency) => (
-                            <SelectItem key={currency.id} value={currency.id.toString()}>
-                              {currency.symbol} {currency.name}
+                          {funds?.map((fund) => (
+                            <SelectItem key={fund.id} value={fund.id.toString()}>
+                              {fund.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="newFundNav">淨值 (選填)</Label>
-                      <Input
-                        id="newFundNav"
-                        type="number"
-                        step="0.000001"
-                        placeholder="例如: 15.25"
-                        value={newFundNav}
-                        onChange={(e) => setNewFundNav(e.target.value)}
-                      />
-                    </div>
-                  </TabsContent>
-                </Tabs>
+                    </TabsContent>
+
+                    <TabsContent value="new" className="space-y-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="newFundCode">基金代碼 *</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="newFundCode"
+                            placeholder="例如: FTS049"
+                            value={newFundCode}
+                            onChange={(e) => handleFundCodeChange(e.target.value)}
+                            disabled={isFetchingFundInfo}
+                          />
+                          {isFetchingFundInfo && (
+                            <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+                          )}
+                        </div>
+                        {fundFetchError && (
+                          <div className="flex items-center gap-2 text-sm text-destructive">
+                            <AlertCircle className="h-4 w-4" />
+                            <span>{fundFetchError}</span>
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          輸入基富通基金代碼，系統將自動抓取基金名稱與淨值
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="newFundName">基金名稱 *</Label>
+                        <Input
+                          id="newFundName"
+                          placeholder="例如: 元大台灣50"
+                          value={newFundName}
+                          onChange={(e) => setNewFundName(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="newFundCurrency">幣別 *</Label>
+                        <Select value={newFundCurrency} onValueChange={setNewFundCurrency}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="選擇幣別" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {currencies?.map((currency) => (
+                              <SelectItem key={currency.id} value={currency.id.toString()}>
+                                {currency.symbol} {currency.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="newFundNav">淨值</Label>
+                        <Input
+                          id="newFundNav"
+                          type="number"
+                          step="0.000001"
+                          placeholder="例如: 15.25"
+                          value={newFundNav}
+                          onChange={(e) => setNewFundNav(e.target.value)}
+                          disabled={isFetchingFundInfo}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          自動抓取或手動輸入淨值
+                        </p>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="units">單位數 *</Label>
@@ -279,120 +362,80 @@ export default function Funds() {
                     id="avgCost"
                     type="number"
                     step="0.000001"
-                    placeholder="例如: 10.5"
+                    placeholder="例如: 15.00"
                     value={avgCost}
                     onChange={(e) => setAvgCost(e.target.value)}
                   />
                 </div>
-                <Button
-                  className="w-full"
-                  onClick={handleCreate}
-                  disabled={createMutation.isPending || createFundMutation.isPending}
-                >
-                  {createMutation.isPending || createFundMutation.isPending ? "新增中..." : "確認新增"}
-                </Button>
+
+                <div className="flex gap-2 pt-4">
+                  <Button
+                    onClick={handleCreate}
+                    disabled={createMutation.isPending}
+                    className="flex-1"
+                  >
+                    {createMutation.isPending ? "新增中..." : "新增持倉"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setOpen(false);
+                      resetForm();
+                    }}
+                    className="flex-1"
+                  >
+                    取消
+                  </Button>
+                </div>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
         {/* Holdings List */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+        <Card>
+          <CardHeader>
+            <CardTitle>持倉清單</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
               <p className="text-muted-foreground">載入中...</p>
-            </div>
-          </div>
-        ) : fundHoldings && fundHoldings.length > 0 ? (
-          <div className="grid gap-4">
-            {fundHoldings.map((holding) => {
-              const fund = funds?.find((f) => f.id === holding.fundId);
-              const value = fund?.nav
-                ? calculateValue(holding.units, fund.nav)
-                : 0;
-              const cost = parseFloat(holding.units) * parseFloat(holding.avgCost);
-              const profit = value - cost;
-              const profitPercent = cost > 0 ? (profit / cost) * 100 : 0;
-
-              return (
-                <Card key={holding.id} className="hover:shadow-lg transition-shadow">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div className="p-2 rounded-lg bg-green-50 flex-shrink-0">
-                        <TrendingUp className="h-5 w-5 text-green-600" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <CardTitle className="text-lg truncate">
-                          {getFundName(holding.fundId)}
-                        </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          {getBankName(holding.bankId)}
-                        </p>
-                      </div>
+            ) : fundHoldings && fundHoldings.length > 0 ? (
+              <div className="space-y-4">
+                {fundHoldings.map((holding) => (
+                  <div
+                    key={holding.id}
+                    className="flex items-center justify-between p-4 border rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <h3 className="font-semibold">{getFundName(holding.fundId)}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {getBankName(holding.bankId)} • 單位數: {holding.units}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        平均成本: {getCurrencySymbol(
+                          funds?.find((f) => f.id === holding.fundId)?.currencyId || 0
+                        )}
+                        {holding.avgCost}
+                      </p>
                     </div>
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="sm"
                       onClick={() => handleDelete(holding.id)}
-                      disabled={deleteMutation.isPending}
-                      className="flex-shrink-0"
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs text-muted-foreground">單位數</p>
-                        <p className="text-sm font-medium mt-1">
-                          {parseFloat(holding.units).toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">平均成本</p>
-                        <p className="text-sm font-medium mt-1">
-                          {fund && getCurrencySymbol(fund.currencyId)}{" "}
-                          {parseFloat(holding.avgCost).toFixed(4)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">現值</p>
-                        <p className="text-sm font-medium mt-1">
-                          {fund && getCurrencySymbol(fund.currencyId)}{" "}
-                          {value.toFixed(2)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">損益</p>
-                        <p
-                          className={`text-sm font-medium mt-1 ${
-                            profit >= 0 ? "text-green-600" : "text-red-600"
-                          }`}
-                        >
-                          {profit >= 0 ? "+" : ""}
-                          {profit.toFixed(2)} ({profitPercent.toFixed(2)}%)
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <Card>
-            <CardContent className="py-12">
-              <div className="text-center">
-                <TrendingUp className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="text-lg font-semibold mb-2">尚無基金持倉</h3>
-                <p className="text-muted-foreground mb-4">
-                  點擊右上角「新增持倉」按鈕開始記錄您的基金投資
-                </p>
+                  </div>
+                ))}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            ) : (
+              <p className="text-muted-foreground text-center py-8">
+                尚無基金持倉，點擊「新增持倉」開始記錄
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DashboardLayout>
   );

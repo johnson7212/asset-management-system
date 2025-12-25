@@ -202,6 +202,31 @@ export const appRouter = router({
         await db.updateFundNav(input.id, navData.nav);
         return { success: true, nav: navData.nav, timestamp: navData.timestamp };
       }),
+    
+    fetchFundInfo: protectedProcedure
+      .input(z.object({
+        fundCode: z.string(),
+      }))
+      .query(async ({ input }) => {
+        // 使用基富通擷取服務獲取基金資訊
+        const fundScraper = await import('./services/fundScraper');
+        const navData = await fundScraper.fetchFundNavFromFundrich(input.fundCode);
+        
+        if (!navData) {
+          throw new TRPCError({ 
+            code: 'NOT_FOUND', 
+            message: `無法找到基金代碼 ${input.fundCode}，請檢查代碼是否正確` 
+          });
+        }
+        
+        return {
+          fundCode: navData.fundCode,
+          fundName: navData.fundName || `基金 ${navData.fundCode}`,
+          nav: navData.nav,
+          currency: navData.currency,
+          timestamp: navData.timestamp,
+        };
+      }),
   }),
 
   // Fund Holding Management
